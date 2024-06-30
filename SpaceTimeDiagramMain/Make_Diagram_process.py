@@ -15,6 +15,10 @@ import gc
 
 #    #カレントディレクトリは省略可能だが明示したい場合は「.」で表し、一階層上位のディレクトリは「..」で表す。「..」を繰り返し記述することでディレクトリ階層の親子関係をたどって上へ移動することができる。
 #    #「../../foo/bar.txt」という記述は、現在のディレクトリの二階層上のディレクトリの中にある「foo」ディレクトリの中にある「bar.txt」というファイルを指し示している。
+#CHANGED ヘッダーの要素数が異なっていたので，それぞれ対応する番号に書き換えている
+#CHANGED Original : time, ID,前方位置(position?),後方位置,道路ID,車線,speed,加速度,車間,相対速度,,,,,etc
+#CHANGED SUMO : time, ID, position, speed
+#CHANGED つまり要素番号 time:変更なし ID:変更なし positon:変更なし speed:6->3
 
 def make_diagram(csv_name,reduce_num):
     '''
@@ -29,7 +33,7 @@ def make_diagram(csv_name,reduce_num):
     #読み込んだcsvのデータを保持する配列（生データ）
     data = []
 
-    with open(file_pass, 'r', encoding="ms932", errors="", newline="") as f:
+    with open(file_pass, 'r', encoding="utf-8", errors="", newline="") as f:
         #リスト形式
         csv_data1 = csv.reader(f, delimiter=",", doublequote=True, lineterminator="\r\n", quotechar='"', skipinitialspace=True)
 
@@ -44,30 +48,27 @@ def make_diagram(csv_name,reduce_num):
 
 
     #========ここから台数と車両IDの最大値を得る============================================
-    carID_max = -1   #最大車両ID用変数の初期化
-    car_list = [[0] * 1  for i in range(0)]
-    car_list_append = car_list.append
-    for i in range(1,len(data)):    #全行の中からIDの最大値を探索
-        if int(data[i][1]) > carID_max:
-            carID_max = int(data[i][1])
-            car_list_append(data[i][1])
-    c = collections.Counter(car_list)
+    car_list= [row[1] for row in data]
+    car_list.remove('ID') #ヘッダーも含まれてしまうので削除
+    c = set(collections.Counter(car_list)) #重複を削除,IDリストになる
     car_num= len(c) #車の台数
     #========ここまで台数と車両IDの最大値を得る============================================
 
 
     #===================ここから車両IDを0から順に辞書型に登録する=======================
     car_dict = {}
-    for i in range(car_num):
-        car_dict[int(car_list[i])] = i
+    for i in c:
+        car_dict[i] = i
     #===================ここまで車両IDを0から順に辞書型に登録する=======================
 
 
     #=========ここから車両ID別データに分類========================================================
-    carData  = [[[0] * 21 for i in range(0)] for j in range(car_num)]#車の台数分用意 
+    # carData  = [[[0] * 21 for i in range(0)] for j in range(car_num)]#車の台数分用意 
+    carData = {}
+    
     for i in range(1,len(data)):#ヘッダーは除外してインクリメント
         #車両IDを見て、対応する配列に一行ずつ丸々追加
-        carData[car_dict[int(data[i][1])]].append(data[i])
+        carData.setdefault(data[i][1], []).append(data[i])
     #=========ここまで車両ID別データに分類========================================================
 
 
@@ -77,9 +78,7 @@ def make_diagram(csv_name,reduce_num):
 
     sim_start_time = int(float(data[1][0]))
 
-    for i in range(1,len(data)):    #シミュレーションの最大時間を探索
-        if int(float(data[i][0])) >= sim_finish_time:
-            sim_finish_time = int(float(data[i][0]))
+    sim_finish_time=int(float(data[len(data)-1][0]))
     #========ここまでシミュレーションの開始時間・終了時間を取得====================================================================
 
 
@@ -92,9 +91,10 @@ def make_diagram(csv_name,reduce_num):
 
     #========ここからy軸作成========================================================
     
-    y = [[None] * (sim_finish_time - sim_start_time + 1) for k in range(car_num)]
+    # y = [[None] * (sim_finish_time - sim_start_time + 1) for k in range(car_num)]
+    y = {key: [None] * (sim_finish_time - sim_start_time + 1) for key in c}
 
-    for k in range(car_num):
+    for k in c:
         start_i = int(float(carData[k][0][0]))
         for i in range(len(carData[k])):
             y[k][start_i - sim_start_time + i] = float(carData[k][i][2])        
@@ -122,7 +122,7 @@ def make_diagram(csv_name,reduce_num):
     colors = get_color_list()#ヒートマップ色にするためのカラーリストを指定
 
     #手法1=================
-    for i in tqdm(range(0,car_num,reduce_num)):
+    for i in tqdm(c):
         ##並列で処理
         #Parallel(n_jobs = 1)([delayed(draw_line)(j,x,y[i],ax1,colors) for j in range(len(x)-1)])
         ##直列で処理
@@ -134,8 +134,8 @@ def make_diagram(csv_name,reduce_num):
     #    Parallel(n_jobs = 1)([delayed(draw_line)(j,x,y[i],ax1,colors) for j in range(len(x)-1) for i in range(0,car_num,reduce_num)])
 
     #軸の最小値と最大値を設定
-    ax1.set_xlim(left=0)
-    ax1.set_ylim(bottom=0, top=10000)
+    ax1.set_xlim(left=sim_start_time)
+    ax1.set_ylim(bottom=0, top=15000)
 
 #==================ここまでグラフ描画======================
 
@@ -146,7 +146,7 @@ def make_diagram(csv_name,reduce_num):
     segment_data = make_segment_data()#セグメントデータをRGBで指定
     cmap = mpl.colors.LinearSegmentedColormap('nipy_spectral_r', segment_data)#カラーマップにする 
 
-    norm = mpl.colors.Normalize(vmin=0, vmax=110)#カラーバーの下限と上限
+    norm = mpl.colors.Normalize(vmin=0, vmax=130)#カラーバーの下限と上限
     #cmap=plt.cm.jet#デフォルトの虹色指定のcbarの引数
     #fig, ax2 = plt.subplots()
     cbar = mpl.colorbar.ColorbarBase(
@@ -254,11 +254,12 @@ def draw_line(j,x,y,ax,colors):
     #1秒間の平均速度から色を決める
     if x[j]!=None and x[j+1]!=None and y[j]!=None and y[j+1]!=None:#計算可能な場合
         ave_vel = ((y[j+1]-y[j])/(x[j+1] - x[j]))*3.66666 #時速を計算
-        color_num = int((ave_vel/110)*1000)#0km/hから110km/hを0から1000の間に正規化
-        try:#速度が0から110km/hのとき
-            Color=tuple(colors.loc[color_num])
-        except:#速度が正規化の範囲から溢れた場合は黒
-            Color=tuple(colors.loc[1000])
-    else:#計算できないときは黒
-        Color=tuple(colors.loc[1000])
-    ax.plot(x[j:j+2], y[j:j+2], color=Color, lw=0.2)
+        if ave_vel>=0: 
+            color_num = int((ave_vel/130)*1000)#0km/hから130km/hを0から1000の間に正規化
+            try:#速度が0から130km/hのとき
+                Color=tuple(colors.loc[color_num])
+            except:#速度が正規化の範囲から溢れた場合は黒
+                Color=tuple(colors.loc[1000])
+            ax.plot(x[j:j+2], y[j:j+2], color=Color, lw=0.2)
+    # else:#計算できないときは黒
+    #     Color=tuple(colors.loc[1000])
