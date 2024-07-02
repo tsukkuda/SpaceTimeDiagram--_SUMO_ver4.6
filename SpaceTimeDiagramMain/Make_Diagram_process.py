@@ -121,13 +121,16 @@ def make_diagram(csv_name,reduce_num):
 
     colors = get_color_list()#ヒートマップ色にするためのカラーリストを指定
 
+    count=0
     #手法1=================
     for i in tqdm(c):
         ##並列で処理
         #Parallel(n_jobs = 1)([delayed(draw_line)(j,x,y[i],ax1,colors) for j in range(len(x)-1)])
         ##直列で処理
-        for j in range(len(x)-1):
-            draw_line(j,x,y[i],ax1,colors)
+        if count%reduce_num==0:
+            for j in range(len(x)-1):
+                draw_line(j,x,y[i],ax1,colors)
+        count+=1
     #手法2=================
     #with tj.tqdm_joblib((len(x)-1)*(len(list(range(0,car_num,reduce_num))))):
     #    #1でないと何故かエラーになる。たぶん二重ループの並列化だからだと思う。
@@ -146,7 +149,7 @@ def make_diagram(csv_name,reduce_num):
     segment_data = make_segment_data()#セグメントデータをRGBで指定
     cmap = mpl.colors.LinearSegmentedColormap('nipy_spectral_r', segment_data)#カラーマップにする 
 
-    norm = mpl.colors.Normalize(vmin=0, vmax=130)#カラーバーの下限と上限
+    norm = mpl.colors.Normalize(vmin=40, vmax=100)#カラーバーの下限と上限
     #cmap=plt.cm.jet#デフォルトの虹色指定のcbarの引数
     #fig, ax2 = plt.subplots()
     cbar = mpl.colorbar.ColorbarBase(
@@ -246,20 +249,44 @@ def make_segment_data():
             (0.888, 156/255, 156/255),
             (1.000,   0/255,   0/255),
         ],
+    'alpha':
+        [
+            (0.000, 1.0, 1.0),
+            (0.111, 1.0, 1.0),
+            (0.222, 1.0, 1.0),
+            (0.333, 1.0, 1.0),
+            (0.444, 1.0, 1.0),
+            (0.555, 1.0, 1.0),
+            (0.666, 1.0, 1.0),
+            (0.777, 1.0, 1.0),
+            (0.888, 1.0, 1.0),
+            (1.000, 0.0, 0.0),
+        ]
 }
 
     return segment_data
 
 def draw_line(j,x,y,ax,colors):
     #1秒間の平均速度から色を決める
-    if x[j]!=None and x[j+1]!=None and y[j]!=None and y[j+1]!=None:#計算可能な場合
-        ave_vel = ((y[j+1]-y[j])/(x[j+1] - x[j]))*3.66666 #時速を計算
-        if ave_vel>=0: 
-            color_num = int((ave_vel/130)*1000)#0km/hから130km/hを0から1000の間に正規化
-            try:#速度が0から130km/hのとき
-                Color=tuple(colors.loc[color_num])
-            except:#速度が正規化の範囲から溢れた場合は黒
-                Color=tuple(colors.loc[1000])
-            ax.plot(x[j:j+2], y[j:j+2], color=Color, lw=0.2)
+    # if x[j]!=None and x[j+1]!=None and y[j]!=None and y[j+1]!=None:#計算可能な場合
+    #     ave_vel = ((y[j+1]-y[j])/(x[j+1] - x[j]))*3.66666 #時速を計算
+    #     if ave_vel>=0: 
+    #         color_num = int((ave_vel/130)*1000)#0km/hから130km/hを0から1000の間に正規化
+    #         try:#速度が0から130km/hのとき
+    #             Color=tuple(colors.loc[color_num])
+    #         except:#速度が正規化の範囲から溢れた場合は黒
+    #             Color=tuple(colors.loc[1000])
+    #         ax.plot(x[j:j+2], y[j:j+2], color=Color, lw=0.2)
     # else:#計算できないときは黒
     #     Color=tuple(colors.loc[1000])
+    
+    if x[j]!=None and x[j+1]!=None and y[j]!=None and y[j+1]!=None:#計算可能な場合
+        ave_vel = ((y[j+1]-y[j])/(x[j+1] - x[j]))*3.66666 #時速を計算
+        if y[j-1]!=None: 
+            if y[j-1]<y[j]<y[j+1]:
+                color_num = int((ave_vel/100)*1000)#* 0km/hから100km/hを0から1000の間に正規化
+                try:#速度が0から130km/hのとき
+                    Color=tuple(colors.loc[color_num])
+                except:#速度が正規化の範囲から溢れた場合は透明
+                    Color=tuple(colors.loc[1000])
+                ax.plot(x[j:j+2], y[j:j+2], color=Color, lw=0.2)
