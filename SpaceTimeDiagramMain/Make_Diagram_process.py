@@ -1,4 +1,4 @@
-﻿import csv
+import csv
 import os
 import collections
 from decimal import Decimal
@@ -284,9 +284,23 @@ def draw_line(j,x,y,ax,colors):
         ave_vel = ((y[j+1]-y[j])/(x[j+1] - x[j]))*3.66666 #時速を計算
         if y[j-1]!=None: 
             if y[j-1]<y[j]<y[j+1]:
-                color_num = int((ave_vel/100)*1000)#* 0km/hから100km/hを0から1000の間に正規化
+                # color_num = int((ave_vel/100)*1000)#* 0km/hから100km/hを0から1000の間に正規化
+                color_num=int(normalize(ave_vel))
                 try:#速度が0から130km/hのとき
                     Color=tuple(colors.loc[color_num])
+                    ax.plot(x[j:j+2], y[j:j+2], color=Color, lw=0.2)
                 except:#速度が正規化の範囲から溢れた場合は透明
                     Color=tuple(colors.loc[1000])
-                ax.plot(x[j:j+2], y[j:j+2], color=Color, lw=0.2)
+                
+                
+def normalize(ave_vel):
+    
+    #* 40km/h-100km/hを
+    original_min = 40
+    original_max = 100
+
+    #* 0から1000の間に正規化
+    normalized_min = 0
+    normalized_max = 1000
+    
+    return (ave_vel - original_min) * (normalized_max - normalized_min) / (original_max - original_min) + normalized_min
